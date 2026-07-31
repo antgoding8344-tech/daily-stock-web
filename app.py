@@ -4,56 +4,90 @@ import feedparser
 from google import genai
 
 # 웹페이지 기본 설정
-st.set_page_config(page_title="나만의 주식 뉴스 AI", page_icon="📈", layout="centered")
+st.set_page_config(page_title="출근길 AI 미국증시 브리핑", page_icon="📰", layout="centered")
 
-st.title("📈 AI 주식/경제 뉴스 요약 봇")
-st.write("관심 있는 종목이나 경제 키워드를 입력하면 AI가 최신 뉴스를 싹 모아서 요약해 드립니다!")
+st.title("📰 출근길 AI 미국증시 & 경제 브리핑")
+st.write("전날 미국 증시와 핵심 경제 뉴스를 팩트 위주로 확인하고 AI 해설까지 한눈에 보세요!")
 
-# 검색어 입력창
-keyword = st.text_input("검색 키워드 (예: S&P 500, 어도비, 앱티브, 미국 금리 등)", "S&P 500 미국 증시")
+# 검색어 기본값을 출근길 미국증시 브리핑용으로 설정
+keyword = st.text_input("검색 키워드", "미국 증시 뉴욕증시 S&P500")
 
-# API 키 세팅 (스트림릿 웹사이트용 보안 설정)
+# API 키 세팅
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
     client = genai.Client(api_key=api_key)
-except:
-    st.error("앗! 아직 AI 열쇠(API 키)가 웹사이트에 연결되지 않았습니다. (다음 단계에서 연결할 예정입니다!)")
+except Exception:
+    st.error("API 키 설정에 오류가 있습니다.")
     st.stop()
 
-# 뉴스 수집 함수
-def fetch_stock_news(search_keyword, max_results=5):
+# 뉴스 수집 함수 (발행 시각 포함, 6개 수집)
+def fetch_stock_news(search_keyword, max_results=6):
     encoded_keyword = urllib.parse.quote(search_keyword)
     rss_url = f"https://news.google.com/rss/search?q={encoded_keyword}&hl=ko&gl=KR&ceid=KR:ko"
     feed = feedparser.parse(rss_url)
     articles = []
+    
     for entry in feed.entries[:max_results]:
-        articles.append({'title': entry.title, 'link': entry.link})
+        # 보도 시각 가져오기
+        published_time = getattr(entry, 'published', '시각 정보 없음')
+        
+        # 구글 RSS의 긴 보도 시각 표기를 읽기 쉽게 간소화
+        if len(published_time) > 16:
+            published_time = published_time[:22]
+            
+        articles.append({
+            'title': entry.title,
+            'link': entry.link,
+            'published': published_time
+        })
     return articles
 
 # 실행 버튼
-if st.button("뉴스 요약 가져오기"):
-    with st.spinner("뉴스를 읽고 AI가 분석하는 중입니다... 잠시만요!"):
-        articles = fetch_stock_news(keyword)
+if st.button("🚀 최신 뉴스 & AI 브리핑 가져오기", type="primary"):
+    with st.spinner("뉴스를 수집하고 분석 중입니다..."):
+        articles = fetch_stock_news(keyword, max_results=6)
         
         if not articles:
-            st.warning("관련 뉴스를 찾지 못했습니다. 키워드를 바꿔보세요.")
+            st.warning("관련 뉴스를 찾지 못했습니다.")
         else:
+            # -------------------------------------------------------------
+            # [SECTION 1] 실제 최신 뉴스 6개 카드 배치 (시각 + 링크)
+            # -------------------------------------------------------------
+            st.subheader("📌 주요 최신 뉴스 (6선)")
+            
+            for idx, article in enumerate(articles, 1):
+                # 깔끔한 상자(Container) 형태로 뉴스 카드 배치
+                with st.container(border=True):
+                    st.markdown(f"**{idx}. [{article['title']}]({article['link']})**")
+                    st.caption(f"🕒 보도 시각: {article['published']}")
+            
+            st.divider()
+
+            # -------------------------------------------------------------
+            # [SECTION 2] AI 심층 종합 해설 및 전망
+            # -------------------------------------------------------------
             news_text = ""
             for idx, article in enumerate(articles, 1):
-                news_text += f"뉴스 {idx}\n- 제목: {article['title']}\n- 링크: {article['link']}\n\n"
+                news_text += f"뉴스 {idx}: {article['title']} (시각: {article['published']})\n"
 
             prompt = f"""
-            당신은 친절한 주식/경제 전문 AI 멘토입니다. 
-            아래 뉴스들을 바탕으로 주식 시장 분석에 도움을 주는 요약을 작성해주세요.
+            당신은 주식/경제 전문 AI 멘토입니다. 
+            바쁜 출근길에 사용자가 핵심만 빠르게 파악할 수 있도록 전달받은 최신 뉴스 6개를 종합하여 브리핑을 작성해주세요.
             
             [뉴스 데이터]
             {news_text}
             
             [작성 가이드라인]
-            1. 오늘의 증시 한 줄 요약
-            2. 주요 이슈별 3줄 요약 (호재/악재 여부 포함)
-            3. 어려운 경제 용어 쉬운 설명
-            웹사이트에서 보기 편하도록 마크다운으로 예쁘게 정리해주세요.
+            1. **📊 전날 미국증시 종합 3줄 요약**
+               - 시장 전체 흐름, 주요 지수 동향, 핵심 이슈를 3줄로 깔끔하게 정리.
+
+            2. **💡 핵심 이슈별 성격 및 전망 해설**
+               - 각 주요 이슈마다 아래 항목을 포함할 것:
+                 - **구분**: [호재 📈] / [악재 📉] / [중립·주의 ⚠️] 중 명확히 표시
+                 - **쉬운 해설**: 전날 증시에 미친 영향과 배경을 주린이도 알기 쉽게 설명
+                 - **향후 전망**: 이 소식이 앞으로 시장에 미칠 영향이나 관전 포인트 1줄 요약
+
+            가독성이 좋게 이모지와 bold체를 적절히 활용해 주세요.
             """
             
             response = client.models.generate_content(
@@ -61,4 +95,5 @@ if st.button("뉴스 요약 가져오기"):
                 contents=prompt,
             )
             
+            st.subheader("🤖 AI 종합 브리핑 & 호재/악재 전망")
             st.markdown(response.text)
